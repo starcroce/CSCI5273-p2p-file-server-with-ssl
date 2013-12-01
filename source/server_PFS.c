@@ -30,6 +30,19 @@ typedef struct{
 	FileInfo fileList[MAX];
 } FileList;
 
+// merge origin master file list with new file list
+FileList *mergeFileList(FileList *master, FileList *newList){
+	int i;
+	for(i = master->num; i < master->num + newList->num; i++){
+		master->fileList[i] = newList->fileList[i - master->num];
+	}
+	return master;
+}
+
+
+
+
+
 // ./server_PFS <port number> <private key> <certificate of server> <CA sert>
 int main(int argc, char const *argv[]){
 	struct sockaddr_in servAddr;
@@ -61,13 +74,37 @@ int main(int argc, char const *argv[]){
 		exit(1);
 	}
 
+	// accept the connection
+	connectSock = accept(servSock, NULL, sizeof(struct sockaddr_in));
+
 	int nbytes;
+	char command[MAXBUFFSIZE];
+
+	// init master file list
+	FileList masterFileList;
+	FileList recvFileList;
+	masterFileList->num = 0;
 
 	while(1){
-		// accept the connection
-		connectSock = accept(servSock, NULL, sizeof(struct sockaddr_in));
+		// recv file list from new client
+		nbytes = recv(connectSock, &recvFileList, sizeof(FileList), 0);
+		if(nbytes < 0){
+			perror("recv file list from client");
+		}
+		else if(nbytes > 0){
+			masterFileList = mergeFileList(&masterFileList, &recvFileList);	
+		}
 
-		char command[MAXBUFFSIZE];
+		// multicast the updated file list
+
+
+
+
+
+
+
+
+
 		bzero(command, sizeof(command));
 		// recv the command from client
 		nbytes = recv(connectSock, command, MAXBUFFSIZE, 0);
@@ -77,8 +114,16 @@ int main(int argc, char const *argv[]){
 
 		// ls command
 		if(strcmp(command, "ls") == 0){
-
+			// send the master file list
+			nbytes = send(connectSock, &masterFileList, sizeof(FileList), 0);
+			if(nbytes < 0){
+				perror("ls fail");
+			}
 		}
+
+
+
+		
 	}
 
 
