@@ -13,6 +13,7 @@
 #include <memory.h>
 #include <string.h>
 #include <dirent.h>
+#include <sys/fcntl.h>
 
 #define MAXBUFFSIZE 1000
 #define MAX 10
@@ -47,7 +48,13 @@ FileList *mergeFileList(FileList *master, FileList *newList){
 int main(int argc, char const *argv[]){
 	struct sockaddr_in servAddr;
 	int servSock; // for listening
-	int connectSock; // for connection
+	int connectSocks[MAX]; // for connection
+
+	// init connectSocks
+	int i;
+	for(i = 0; i < MAX; i++){
+		connectSocks[i] = -1;
+	}
 
 	// setup sockaddr
 	bzero(&servAddr, sizeof(servAddr));
@@ -68,17 +75,27 @@ int main(int argc, char const *argv[]){
 		exit(1);
 	}
 
+	// set to non-block mode
+	if(fcntl(servSock, F_SETEL, O_NDELAY) < 0){
+		perror("set non-block");
+		exit(1);
+	}
+
 	// listen on the port
 	if(listen(servSock, MAX) < 0){
 		perror("listen on the port");
 		exit(1);
 	}
 
+
+
+
 	// accept the connection
-	connectSock = accept(servSock, NULL, sizeof(struct sockaddr_in));
+	// connectSock = accept(servSock, NULL, sizeof(struct sockaddr_in));
 
 	int nbytes;
 	char command[MAXBUFFSIZE];
+	int flag;
 
 	// init master file list
 	FileList masterFileList;
@@ -86,44 +103,74 @@ int main(int argc, char const *argv[]){
 	masterFileList->num = 0;
 
 	while(1){
-		// recv file list from new client
-		nbytes = recv(connectSock, &recvFileList, sizeof(FileList), 0);
-		if(nbytes < 0){
-			perror("recv file list from client");
+		// accept the client connection and set non-block
+		for(i = 0; i < MAX; i++){
+			if(connectSocks[i] == -1){
+				connectSocks[i] = accept(servSock, NULL, sizeof(struct sockaddr_in));
+				if(connectSocks[i] > 0){
+					// set connectSock to non-block
+					if(fcntl(connectSocks[i], F_SETEL, O_NDELAY) < 0){
+						perror("cannot set connect sock non-block");
+					}
+				}
+			}
 		}
-		else if(nbytes > 0){
-			masterFileList = mergeFileList(&masterFileList, &recvFileList);	
+
+		// recv file list or command from client
+		for(i = 0; i < MAX; i++){
+			if(connectSocks[i] > 0){
+				// recv file list from new client
+				nbytes = recv(connectSocks[i], &recvFileList, sizeof(FileList), 0);
+				if(nbytes > 0){
+					flag = 1;
+					masterFileList = mergeFileList(&masterFileList, &recvFileList);	
+				}
+				// recv the command from client
+				bzero(command, sizeof(command));
+				nbytes = recv(connectSock[i], command, MAXBUFFSIZE, 0);
+				if(nbytes > 0){
+					flag = 2;
+					printf("client: %s\n", command);
+					// if it is "ls", send the master file list
+					if(strcmp(command, "ls") == 0){
+						nbytes = send(connectSocks[i], &masterFileList, sizeof(FileList), 0);
+						if(nbytes < 0){
+							perror("ls, send master file list");
+						}
+					}
+				}
+
+			}
 		}
 
 		// multicast the updated file list
-
-
-
-
-
-
-
-
-
-		bzero(command, sizeof(command));
-		// recv the command from client
-		nbytes = recv(connectSock, command, MAXBUFFSIZE, 0);
-		if(nbytes > 0){
-			printf("client: %s\n", command);
-		}
-
-		// ls command
-		if(strcmp(command, "ls") == 0){
-			// send the master file list
-			nbytes = send(connectSock, &masterFileList, sizeof(FileList), 0);
-			if(nbytes < 0){
-				perror("ls fail");
+		if(flag == 1){
+			for(i = 0; i < MAX; i++){
+				if(connectSocks[i] > 0){
+					nbytes = send(connectSocks[i], &masterFileList, sizeof(FileList), 0);
+					if(nbytes < 0){
+						perror("send master file list");
+					}
+				}
 			}
 		}
 
 
+		// // receive commands
+		// if(flag == 2){
+		// 	// ls command
+		// 	if(strcmp(command, "ls") == 0){
+		// 		// send the master file list
+		// 		nbytes = send(connectSock, &masterFileList, sizeof(FileList), 0);
+		// 		if(nbytes < 0){
+		// 			perror("ls fail");
+		// 		}
+		// 	}
+		// }
 
-		
+
+
+
 	}
 
 
