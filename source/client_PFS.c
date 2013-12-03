@@ -14,60 +14,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
-
-#define MAXBUFFSIZE 1000
-#define MAX 10
-
-typedef struct{
-	char *fileName;
-	int fileSize;
-	char *fileOwner;
-	char *ownerIP;
-	int ownerPort;
-} FileInfo;
-
-typedef struct{
-	int num;
-	FileInfo files[MAX];
-} FileList;
-
-
-// get file name list
-void getFileList(FileList *fileList){
-	struct dirent **namelist;
-	int n;
-	n = scandir(".", &namelist, 0, alphasort);
-	if(n < 0){
-		perror("scan dir");
-		exit(1);
-	}
-	fileList->num = n - 2;
-	int k = 0;
-	while(n--){
-		FileInfo fileInfo;
-		if((strcmp(namelist[n]->d_name, "..") != 0) && (strcmp(namelist[n]->d_name, ".") != 0 )){
-			fileInfo.fileName = namelist[n]->d_name;
-			fileList->files[k] = fileInfo;
-			k++;
-		}
-		free(namelist[n]);
-	}
-	free(namelist);
-}
-
-void printFileList(FileList *fileList){
-	int i;
-	for(i = 0; i < fileList->num; i++){
-		printf("%s||%d||%s||%s||%d\n", 
-			fileList->files[i].fileName,
-			fileList->files[i].fileSize,
-			fileList->files[i].fileOwner,
-			fileList->files[i].ownerIP,
-			fileList->files[i].ownerPort);
-	}
-}
-
-
+#include "util.h"
 
 // ./client_PFS <Client Name> <Server IP> <Server Port> <Private Key> <Certificate of this Client> <CA Cert>
 int main(int argc, char const *argv[]){
@@ -113,22 +60,26 @@ int main(int argc, char const *argv[]){
 	}
 
 	// get local file info list
-	FileList fileList;
-	struct stat st;
-	getFileList(&fileList);
+	FileList localList;
+    FileList masterList;
+    Packet sendPacket;
+    Packet recvPacket;
+	
+    struct stat st;
+	getFileList(&(sendPacket.fileList));
 	int i;
-	for(i = 0; i < fileList.num; i++){
-		stat(fileList.files[i].fileName, &st);
-		fileList.files[i].fileSize = st.st_size;
-		fileList.files[i].fileOwner = argv[1];
-		fileList.files[i].ownerIP = "local";
-		fileList.files[i].ownerPort = 9500 + (argv[1][0] - 'A');
+	for(i = 0; i < localList.num; i++){
+		stat(sendPacket.fileList.files[i].fileName, &st);
+		sendPacket.fileList.files[i].fileSize = st.st_size;
+		strcpy(sendPacket.fileList.files[i].fileOwner, argv[1]);
+		strcpy(sendPacket.fileList.files[i].ownerIP, "local");
+		sendPacket.fileList.files[i].ownerPort = 9500 + (argv[1][0] - 'A');
 	}
-	printFileList(&fileList);
+	printFileList(&localList);
 
 	// upload file list to server
 	int nbytes;
-	nbytes = send(clieSock, &fileList, sizeof(FileList), 0);
+	nbytes = send(clieSock, &sendPacket, sizeof(Packet), 0);
 	if(nbytes < 0){
 		perror("init upload");
 		exit(1);

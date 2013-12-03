@@ -14,32 +14,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/fcntl.h>
-
-#define MAXBUFFSIZE 1000
-#define MAX 10
-
-typedef struct{
-	char *fileName;
-	int fileSize;
-	char fileOwner;
-	char *ownerIP;
-	int ownerPort;
-} FileInfo;
-
-typedef struct{
-	int num;
-	FileInfo fileList[MAX];
-} FileList;
-
-// merge origin master file list with new file list
-FileList *mergeFileList(FileList *master, FileList *newList){
-	int i;
-	for(i = master->num; i < master->num + newList->num; i++){
-		master->fileList[i] = newList->fileList[i - master->num];
-	}
-	return master;
-}
-
+#include "util.h"
 
 
 
