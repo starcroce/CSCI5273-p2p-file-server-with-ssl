@@ -34,7 +34,7 @@ int main(int argc, char const *argv[]){
 	// setup sockaddr
 	bzero(&servAddr, sizeof(servAddr));
 	servAddr.sin_family = AF_INET;
-	servAddr.sin_addr.s_addr = INADOOR_ANY;
+	servAddr.sin_addr.s_addr = INADDR_ANY;
 	servAddr.sin_port = htons(atoi(argv[1]));
 
 	// create socket
@@ -51,7 +51,7 @@ int main(int argc, char const *argv[]){
 	}
 
 	// set to non-block mode
-	if(fcntl(servSock, F_SETEL, O_NDELAY) < 0){
+	if(fcntl(servSock, F_SETFL, O_NDELAY) < 0){
 		perror("set non-block");
 		exit(1);
 	}
@@ -62,12 +62,6 @@ int main(int argc, char const *argv[]){
 		exit(1);
 	}
 
-
-
-
-	// accept the connection
-	// connectSock = accept(servSock, NULL, sizeof(struct sockaddr_in));
-
 	int nbytes;
 	char command[MAXBUFFSIZE];
 	int flag;
@@ -75,7 +69,7 @@ int main(int argc, char const *argv[]){
 	// init master file list
 	FileList masterFileList;
 	FileList recvFileList;
-	masterFileList->num = 0;
+	masterFileList.num = 0;
 
 	while(1){
 		// accept the client connection and set non-block
@@ -84,7 +78,7 @@ int main(int argc, char const *argv[]){
 				connectSocks[i] = accept(servSock, NULL, sizeof(struct sockaddr_in));
 				if(connectSocks[i] > 0){
 					// set connectSock to non-block
-					if(fcntl(connectSocks[i], F_SETEL, O_NDELAY) < 0){
+					if(fcntl(connectSocks[i], F_SETFL, O_NDELAY) < 0){
 						perror("cannot set connect sock non-block");
 					}
 				}
@@ -98,11 +92,11 @@ int main(int argc, char const *argv[]){
 				nbytes = recv(connectSocks[i], &recvFileList, sizeof(FileList), 0);
 				if(nbytes > 0){
 					flag = 1;
-					masterFileList = mergeFileList(&masterFileList, &recvFileList);	
+					mergeFileList(&masterFileList, &recvFileList);	
 				}
 				// recv the command from client
 				bzero(command, sizeof(command));
-				nbytes = recv(connectSock[i], command, MAXBUFFSIZE, 0);
+				nbytes = recv(connectSocks[i], command, MAXBUFFSIZE, 0);
 				if(nbytes > 0){
 					flag = 2;
 					printf("client: %s\n", command);

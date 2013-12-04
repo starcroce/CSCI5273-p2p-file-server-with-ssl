@@ -31,6 +31,7 @@ typedef struct{
 	FileInfo files[MAX];
 } FileList;
 
+// type = 1 for file list, type = 0 for command
 typedef struct {
     int type;
     char cmd[256];
@@ -47,14 +48,13 @@ void getFileList(FileList *fileList){
 		perror("scan dir");
 		exit(1);
 	}
-	fileList->num = n - 2;
-	int k = 0;
-	while(n--){
-		FileInfo fileInfo;
-		if((strcmp(namelist[n]->d_name, "..") != 0) && (strcmp(namelist[n]->d_name, ".") != 0 )){
-			fileInfo.fileName = namelist[n]->d_name;
-			fileList->files[k] = fileInfo;
-			k++;
+    fileList->num = 0;
+	while(n--)
+    {
+		if((strcmp(namelist[n]->d_name, "..") != 0) && (strcmp(namelist[n]->d_name, ".") != 0 ))
+        {
+            strcpy(fileList->files[fileList->num].fileName, namelist[n]->d_name);
+            fileList->num++;
 		}
 		free(namelist[n]);
 	}
@@ -73,12 +73,33 @@ void printFileList(FileList *fileList){
 	}
 }
 
+void copyFileList(FileList *copyto, FileList *from)
+{
+    int i;
+    copyto->num = from->num;
+    for (i = 0; i < from->num; i++)
+    {
+        strcpy(copyto->files[i].fileName, from->files[i].fileName);
+        strcpy(copyto->files[i].fileOwner, from->files[i].fileOwner);
+        copyto->files[i].fileSize = from->files[i].fileSize;
+        strcpy(copyto->files[i].ownerIP, from->files[i].ownerIP);
+        copyto->files[i].ownerPort = from->files[i].ownerPort;
+    }
+}
+
 // merge origin master file list with new file list
-FileList *mergeFileList(FileList *master, FileList *newList){
+void mergeFileList(FileList *master, FileList *newList){
 	int i;
-	for(i = master->num; i < master->num + newList->num; i++){
-		master->fileList[i] = newList->fileList[i - master->num];
+    int size = master->num;
+	for(i = size; i < size + newList->num; i++)
+    {
+        strcpy(master->files[i].fileName, newList->files[i - size].fileName);
+        strcpy(master->files[i].fileOwner, newList->files[i - size].fileOwner);
+        master->files[i].fileSize = newList->files[i - size].fileSize;
+        strcpy(master->files[i].ownerIP, newList->files[i - size].ownerIP);
+        master->files[i].ownerPort = newList->files[i - size].ownerPort;
+		//master->fileList[i] = newList->fileList[i - master->num];
 	}
-	return master;
+    master->num = size + newList->num;
 }
 
