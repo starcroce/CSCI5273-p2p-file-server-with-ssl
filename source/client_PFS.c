@@ -21,8 +21,9 @@
 // ./client_PFS <Client Name> <Server IP> <Server Port> <Private Key> <Certificate of this Client> <CA Cert>
 int main(int argc, char const *argv[]){
 	struct sockaddr_in remoteAddr, p2pAddr;
-	int clieSock; // for connecting to server
-	int p2pSock; // for p2p transfer
+	int clieSock;   // for connecting to server
+	int p2pSock;    // for p2p transfer
+    int toexit = 0;       // exit
 
 	// setup sockaddr
 	bzero(&remoteAddr, sizeof(remoteAddr));
@@ -102,46 +103,64 @@ int main(int argc, char const *argv[]){
 	char command[128];
     while(1)
     {
-		printf("input command: ls, get, exit\n");
+        printf("input command: ls, get, exit\n");
 
-
+        while(!kbhit())
+        {
+            // no user input, recv from server
+            nbytes = recv(clieSock, &recvPacket, sizeof(Packet), 0);
+            if (nbytes > 0)
+            {
+                if (recvPacket.type == 0)
+                {
+                    if (strcmp(recvPacket.cmd, "Client existed")==0)
+                    {
+                        // client already existed, quit
+                        printf("Client %s already registered with server, exiting...\n", argv[1]);
+                        exit(1);
+                    }
+                }
+                else
+                {// recv file list
+                    printf("Received master file list from server\n");
+                    copyFileList(&(masterList), &(recvPacket.fileList));
+                    printFileList(&(masterList));
+                }
+            }
+            // try to recv from p2p address
+        }
 		gets(command);
-
+        printf("get user input: %s\n", command);
 		// ls command
 		if(strcmp(command, "ls") == 0)
         {
             strcpy(sendCmdPacket.cmd, command);
 			nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
-			if(nbytes < 0){
+			if(nbytes < 0)
+            {
 				perror("send ls command");
 			}
         }
         if (strcmp(command, "exit") == 0)
         {
-        }
-        if (strcmp(command, "get") == 0)
-        {
-        }
-
-        // try to receive from server
-        nbytes = recv(clieSock, &recvPacket , sizeof(Packet), 0);
-        if(nbytes > 0){
-			if (recvPacket.type == 0)
-            {// command
+            // deregister with server
+            strcpy(sendCmdPacket.cmd, command);
+            nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
+            if (nbytes < 0)
+            {
+                perror("send exit command");
             }
             else
-            {// file list
-            	printf("receive filelist from server\n");
-                printFileList(&(recvPacket.fileList));
-                // copy to master file list
-                copyFileList(&(masterList), &(recvPacket.fileList));
+            {
+                printf("Client %s exiting...\n", argv[1]);
+                exit(1);
             }
-		}
+        }
+        if (strstr(command, "get") == 0)
+        {
+
+        }
     }
-
-
-
-
 
 	return 0;
 }
