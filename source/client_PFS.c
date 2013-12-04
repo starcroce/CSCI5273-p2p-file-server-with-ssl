@@ -81,6 +81,7 @@ int main(int argc, char const *argv[]){
     struct stat st;
 	getFileList(&(localFileListPacket.fileList));
 	strcpy(localFileListPacket.fileList.owner, argv[1]);
+    strcpy(sendCmdPacket.fileList.owner, argv[1]);
 	int i;
 	for(i = 0; i < localFileListPacket.fileList.num; i++)
     {
