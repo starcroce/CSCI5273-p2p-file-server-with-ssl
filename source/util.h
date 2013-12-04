@@ -143,3 +143,51 @@ int kbhit()
     select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
     return FD_ISSET(STDIN_FILENO, &fds);
 }
+
+// remove exit clinet's file list from master file list
+void deregisterClient(NameList *clients, FileList *master, char *name)
+{   
+    // remove client name from name list
+    int i = 0;
+    while(strcmp(clients->names[i], name) != 0)
+    {
+        i++;
+    }
+    int j;
+    for(j = i; j < clients->num; j++)
+    {
+        strcpy(clients->names[j], clients->names[j+1]);
+    }
+    clients->num--;
+
+    // remove client's file list from master file list
+    // get the position of exit client in the master file list
+    int pos1 = 0, pos2 = 0;
+    for(i = 0; i < master->num; i++)
+    {
+        if(strcmp(master->files[i].fileOwner, name) == 0)
+        {
+            pos1 = i;
+            pos2 = pos1;
+            while(strcmp(master->files[pos2].fileOwner, name) == 0)
+            {
+                pos2++;
+            }
+            break;
+        }
+    }
+    // overwrite these entries with the following entries
+    int range = pos2 - pos1;
+    master->num -= range;
+    for(i = pos1; i < master->num; i++)
+    {
+        if(strcmp(master->files[i].fileOwner, name) == 0)
+        {
+            strcpy(master->files[i].fileName, master->files[i + range].fileName);
+            strcpy(master->files[i].fileOwner, master->files[i + range].fileOwner);
+            master->files[i].fileSize = master->files[i + range].fileSize;
+            strcpy(master->files[i].ownerIP, master->files[i + range].ownerIP);
+            master->files[i].ownerPort = master->files[i + range].ownerPort;
+        }
+    }
+}

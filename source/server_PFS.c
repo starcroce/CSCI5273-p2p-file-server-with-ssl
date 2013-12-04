@@ -133,7 +133,7 @@ int main(int argc, char const *argv[]){
 									}
 									if(nbytes > 0)
 									{
-										printf("push file list\n");
+										printf("push the merged file list\n");
 									}
 								}
 							}	
@@ -148,16 +148,41 @@ int main(int argc, char const *argv[]){
 							}
 						}	
 					}
-					// if receive the command from client
+					// if receive command from client
 					if(recvPacket.type == 0)
 					{
 						printf("client: %s\n", recvPacket.cmd);
+						// ls command
 						if(strcmp(recvPacket.cmd, "ls") == 0)
 						{
 							nbytes = send(connectSocks[i], &sendFlieListPacket, sizeof(Packet), 0);
 							if(nbytes < 0)
 							{
 								perror("response to ls command");
+							}
+						}
+						// exit command
+						if(strcmp(recvPacket.cmd, "exit") == 0)
+						{
+							// deregister client and push the updated file list
+							deregisterClient(&clients, &sendFlieListPacket.fileList, recvPacket.fileList.owner);
+							// close this socket
+							close(connectSocks[i]);
+							connectSocks[i] = -1;
+							for(j = 0; j < MAX; j++)
+							{
+								if(connectSocks[j] > 0)
+								{
+									nbytes = send(connectSocks[j], &sendFlieListPacket, sizeof(Packet), 0);
+									if(nbytes < 0)
+									{
+										perror("push updated file list");
+									}
+									if(nbytes > 0)
+									{
+										printf("push the updated file list after deregister\n");
+									}
+								}
 							}
 						}
 					}
