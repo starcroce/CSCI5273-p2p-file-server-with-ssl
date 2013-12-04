@@ -16,7 +16,7 @@
 #include <dirent.h>
 
 #define MAXBUFFSIZE 1000
-#define MAX 10
+#define MAX 30
 
 typedef struct{
 	char fileName[128];
@@ -26,8 +26,16 @@ typedef struct{
 	int ownerPort;
 } FileInfo;
 
+
+typedef struct 
+{
+    char names[MAX][8];
+    char num;
+} NameList;
+
 typedef struct{
 	int num;
+    char owner[8];
 	FileInfo files[MAX];
 } FileList;
 
@@ -103,3 +111,21 @@ void mergeFileList(FileList *master, FileList *newList){
     master->num = size + newList->num;
 }
 
+// check if client already existed
+// 0 for new client, 1 for already existed
+int isExisted(NameList *clients, char *name)
+{
+    int flag = 0;
+    int i;
+    for(i = 0; i < MAX; i++)
+    {
+        if(strcmp(clients->names[i], name) == 0)
+        {
+            flag = 1;
+            return flag;
+        }
+    }
+    strcpy(clients->names[clients->num], name);
+    clients->num++;
+    return flag;
+}

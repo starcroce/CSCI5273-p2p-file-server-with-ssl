@@ -70,18 +70,18 @@ int main(int argc, char const *argv[]){
     {
     }
 	// get local file info list
-	FileList localList;
     FileList masterList;
     Packet localFileListPacket;
     Packet sendCmdPacket;
     Packet recvPacket;
-    localFileListPacket.type = 0;
-    sendCmdPacket.type = 1;
+    localFileListPacket.type = 1;
+    sendCmdPacket.type = 0;
 	
     struct stat st;
 	getFileList(&(localFileListPacket.fileList));
+	strcpy(localFileListPacket.fileList.owner, argv[1]);
 	int i;
-	for(i = 0; i < localList.num; i++)
+	for(i = 0; i < localFileListPacket.fileList.num; i++)
     {
 		stat(localFileListPacket.fileList.files[i].fileName, &st);
 		localFileListPacket.fileList.files[i].fileSize = st.st_size;
@@ -103,10 +103,12 @@ int main(int argc, char const *argv[]){
     while(1)
     {
 		printf("input command: ls, get, exit\n");
+
+
 		gets(command);
 
 		// ls command
-		if(strcmp(command, "ls"))
+		if(strcmp(command, "ls") == 0)
         {
             strcpy(sendCmdPacket.cmd, command);
 			nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
@@ -114,25 +116,22 @@ int main(int argc, char const *argv[]){
 				perror("send ls command");
 			}
         }
-        if (strcmp(command, "exit"))
+        if (strcmp(command, "exit") == 0)
         {
         }
-        if (strcmp(command, "get"))
+        if (strcmp(command, "get") == 0)
         {
         }
 
         // try to receive from server
         nbytes = recv(clieSock, &recvPacket , sizeof(Packet), 0);
-        if(nbytes < 0)
-        {
-        perror("receive updated file list");
-        }
-		else if(nbytes > 0){
+        if(nbytes > 0){
 			if (recvPacket.type == 0)
             {// command
             }
             else
             {// file list
+            	printf("receive filelist from server\n");
                 printFileList(&(recvPacket.fileList));
                 // copy to master file list
                 copyFileList(&(masterList), &(recvPacket.fileList));
