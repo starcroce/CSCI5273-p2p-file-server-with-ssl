@@ -24,6 +24,7 @@ int main(int argc, char const *argv[]){
 	int clieSock;   // for connecting to server
 	int p2pSock;    // for p2p transfer
     int toexit = 0;       // exit
+    int peerSock = -1;
 
 	// setup sockaddr
 	bzero(&remoteAddr, sizeof(remoteAddr));
@@ -33,8 +34,8 @@ int main(int argc, char const *argv[]){
 
 	bzero(&p2pAddr, sizeof(p2pAddr));
 	p2pAddr.sin_family = AF_INET;
-	p2pAddr.sin_addr.s_addr = INADDR_ANY;
-	p2pAddr.sin_port = htons((int)(9500 + (argv[1] - 'A')));
+	p2pAddr.sin_addr.s_addr = inet_addr(argv[2]);//INADDR_ANY;
+	p2pAddr.sin_port = htons((int)(9500 + (argv[1][0] - 'A')));
 
 	// create socket
 	clieSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -44,7 +45,12 @@ int main(int argc, char const *argv[]){
 		exit(1);
 	}
 
-	// bind socket with p2p port
+	if (fcntl(p2pSock, F_SETFL, O_NDELAY)<0)
+    {
+        perror("error set non-block for client-p2p socket");
+        exit(1);
+    }
+    // bind socket with p2p port
 	if(bind(p2pSock, (struct sockaddr *)&p2pAddr, sizeof(p2pAddr)) < 0){
 		perror("bind socket");
 		exit(1);
@@ -64,11 +70,8 @@ int main(int argc, char const *argv[]){
     // set sockets to non-block mode
     if (fcntl(clieSock, F_SETFL, O_NDELAY) < 0)
     {
-        perror("set non-block");
+        perror("error set non-block for client-server socket");
         exit(1);
-    }
-    if (fcntl(p2pSock, F_SETFL, O_NDELAY) < 0)
-    {
     }
 	// get local file info list
     FileList masterList;
@@ -88,7 +91,7 @@ int main(int argc, char const *argv[]){
 		stat(localFileListPacket.fileList.files[i].fileName, &st);
 		localFileListPacket.fileList.files[i].fileSize = st.st_size;
 		strcpy(localFileListPacket.fileList.files[i].fileOwner, argv[1]);
-		strcpy(localFileListPacket.fileList.files[i].ownerIP, "127.0.0.1");
+		strcpy(localFileListPacket.fileList.files[i].ownerIP, argv[2]);
 		localFileListPacket.fileList.files[i].ownerPort = 9500 + (argv[1][0] - 'A');
 	}
 	printFileList(&(localFileListPacket.fileList));
@@ -128,10 +131,99 @@ int main(int argc, char const *argv[]){
                     printFileList(&(masterList));
                 }
             }
-            // try to recv from p2p address
+            // try to accept on p2p listen socket
+            peerSock = accept(p2pSock, NULL, sizeof(struct sockaddr_in));
+            if(peerSock > 0)
+            {
+                sleep(1);
+                // connection established
+                // set to nonblock
+                /*
+                if (fcntl(peerSock, F_SETFL, F_SETFL, O_NDELAY)<0)
+                {
+                    perror("error set non block for peer connection\n");
+                }
+                */
+                // peer-2-peer connection handling
+                
+                int rtn = 1, fsize, size_per_send;
+                char fname[128];
+                DataPacket recvDataPacket, sendDataPacket;
+                FILE *file;
+                
+                // try to receive from remote peer
+                nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
+                if (nbytes > 0)
+                {
+                    // check cmd field
+                    printf("recv cmd %s from remote peer\n", recvDataPacket.cmd);
+                    if (strstr(recvDataPacket.cmd, "get"))
+                    {
+                        // parse file name
+                        char* sec_arg = strstr(recvDataPacket.cmd, " ");
+                        strcpy(fname, sec_arg+1);
+                        file = fopen(fname, "rb");
+                        if (file == NULL)
+                        {
+                            printf("Failed open file %s.\n", fname);
+                            strcpy(sendDataPacket.cmd, "File Not Found");
+                            nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                            if (nbytes < 0)
+                            {
+                                perror("error send cmd File Not Found to remote peer");
+                            }
+                            rtn = 0;
+                        }
+                        strcpy(sendDataPacket.cmd, "Sending");
+                        nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                        if (nbytes < 0)
+                        {
+                            perror("error send cmd Sending to remote peer");
+                        }
+                        struct stat st;
+                        stat(fname, &st);
+                        fsize = st.st_size;
+                        int repeats = (int) (fsize/MAXBUFFSIZE) + 1;
+                        for (i=0; i<repeats; i++)
+                        {
+                            size_per_send = (MAXBUFFSIZE) < (fsize-i*MAXBUFFSIZE) ? (MAXBUFFSIZE):(fsize-i*MAXBUFFSIZE);
+                            int readed = fread(sendDataPacket.payload, sizeof(char), size_per_send, file);
+                            sendDataPacket.size = size_per_send;
+                            nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                            if (nbytes < 0)
+                            {
+                                perror("error send file to remote peer");
+                            }
+                        }
+                        fclose(file);
+                        printf("file sent\n");
+                        // receive response from reomte peer
+                        nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
+                        if (nbytes > 0)
+                        {
+                            if (strcmp(recvDataPacket.cmd, "File received")==0)
+                            {
+                                printf("Remote peer received file %s\n", fname);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        printf("unexpected remote command: %s\n", recvDataPacket.cmd);
+                        rtn = 0;
+                    }
+                }
+                else
+                {
+                    perror("error recv in handleRemotePeerConnection");
+                    rtn = 0;
+                }
+                close(peerSock);
+                break;
+                //handleRemotePeerConnection(peerSock);
+            }
         }
 		gets(command);
-        printf("get user input: %s\n", command);
 		// ls command
 		if(strcmp(command, "ls") == 0)
         {
@@ -157,9 +249,9 @@ int main(int argc, char const *argv[]){
                 exit(1);
             }
         }
-        if (strstr(command, "get") == 0)
+        if (strstr(command, "get"))
         {
-
+            connectRemotePeer(command, &masterList);
         }
     }
 
