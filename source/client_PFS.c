@@ -74,13 +74,9 @@ int main(int argc, char const *argv[]){
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
     SSL_CTX_set_verify_depth(ctx, 1);
 
-
-
-
 	struct sockaddr_in remoteAddr, p2pAddr;
 	int clieSock;   // for connecting to server
 	int p2pSock;    // for p2p transfer
-    int toexit = 0;       // exit
     int peerSock = -1;
 
 	// setup sockaddr
@@ -143,9 +139,7 @@ int main(int argc, char const *argv[]){
     }
 	// get local file info list
     FileList masterList;
-    Packet localFileListPacket;
-    Packet sendCmdPacket;
-    Packet recvPacket;
+    Packet localFileListPacket, sendCmdPacket, recvPacket;
     localFileListPacket.type = 1;
     sendCmdPacket.type = 0;
 	
@@ -200,6 +194,7 @@ int main(int argc, char const *argv[]){
                     copyFileList(&(masterList), &(recvPacket.fileList));
                     printFileList(&(masterList));
                 }
+                printf("input command: ls, get, exit\n");
             }
             // try to accept on p2p listen socket
             peerSock = accept(p2pSock, NULL, sizeof(struct sockaddr_in));
@@ -272,7 +267,7 @@ int main(int argc, char const *argv[]){
                         {
                             size_per_send = (MAXBUFFSIZE) < (fsize-i*MAXBUFFSIZE) ? (MAXBUFFSIZE):(fsize-i*MAXBUFFSIZE);
                             int readed = fread(sendDataPacket.payload, sizeof(char), size_per_send, file);
-                            sendDataPacket.size = size_per_send;
+                            sendDataPacket.size = readed;
                             // nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
                             nbytes = SSL_write(p2pSSL, &sendDataPacket, sizeof(DataPacket));
                             if (nbytes < 0)
@@ -292,6 +287,10 @@ int main(int argc, char const *argv[]){
                                 printf("Remote peer received file %s\n", fname);
                             }
                         }
+                        else
+                        {
+                            perror("error recv peer file received msg");
+                        }
                     }
                     else
                     {
@@ -304,8 +303,10 @@ int main(int argc, char const *argv[]){
                     perror("error recv in handleRemotePeerConnection");
                     rtn = 0;
                 }
+                sleep(1);
                 close(peerSock);
-                break;
+                printf("input command: ls, get, exit\n");
+                //break;
                 //handleRemotePeerConnection(peerSock);
             }
         }
@@ -339,7 +340,7 @@ int main(int argc, char const *argv[]){
         }
         if (strstr(command, "get"))
         {
-            connectRemotePeer(command, &masterList, keyName, certName, CACert);
+            connectRemotePeer(command, &masterList, argv[1], keyName, certName, CACert);
         }
     }
 

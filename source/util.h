@@ -80,15 +80,17 @@ void getFileList(FileList *fileList){
 
 void printFileList(FileList *fileList){
     int i;
+    printf("\nFile name\t||File size Byte||File owner\t||Owner IP\t||Owner port\n");
     for(i = 0; i < fileList->num; i++)
     {
-        printf("%s||%d||%s||%s||%d\n",
+        printf("%s\t||%d\t\t||%s\t\t||%s\t||%d\n",
                fileList->files[i].fileName,
                fileList->files[i].fileSize,
                fileList->files[i].fileOwner,
                fileList->files[i].ownerIP,
                fileList->files[i].ownerPort);
     }
+    printf("\n");
 }
 
 void copyFileList(FileList *copyto, FileList *from)
@@ -201,97 +203,12 @@ void deregisterClient(NameList *clients, FileList *master, char *name)
     }
 }
 
-/*
- * int handleRemotePeerConnection(int connectSock)
- * Handle get file command from remote client
- * return 0 for error, return 1 for success
- */
-int handleRemotePeerConnection(int connectSock)
-{
-    int rtn = 1;
-    int nbytes, fsize, size_per_send, i;
-    char fname[128];
-    DataPacket recvPacket, sendPacket;
-    FILE *file;
-
-    // try to receive from remote peer
-    nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
-    if (nbytes > 0)
-    {
-        // check cmd field
-        if (strstr(recvPacket.cmd, "get"))
-        {
-            // parse file name
-            char* sec_arg = strstr(recvPacket.cmd, " ");
-            strcpy(fname, sec_arg+1);
-            file = fopen(fname, "rb");
-            if (file == NULL)
-            {
-                printf("Failed open file %s.\n", fname);
-                strcpy(sendPacket.cmd, "File Not Found");
-                nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
-                if (nbytes < 0)
-                {
-                    perror("error send cmd File Not Found to remote peer");
-                }
-                close(connectSock);
-                rtn = 0;
-                return rtn;
-            }
-            strcpy(sendPacket.cmd, "Sending");
-            nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
-            if (nbytes < 0)
-            {
-                perror("error send cmd Sending to remote peer");
-            }
-            struct stat st;
-            stat(fname, &st);
-            fsize = st.st_size;
-            int repeats = (int) (fsize/MAXBUFFSIZE) + 1;
-            for (i=0; i<repeats; i++)
-            {
-                size_per_send = (MAXBUFFSIZE) < (fsize-i*MAXBUFFSIZE) ? (MAXBUFFSIZE):(fsize-i*MAXBUFFSIZE);
-                int readed = fread(sendPacket.payload, sizeof(char), size_per_send, file);
-                sendPacket.size = size_per_send;
-                nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
-                if (nbytes < 0)
-                {
-                    perror("error send file to remote peer");
-                }
-            }
-            fclose(file);
-            // receive response from reomte peer
-            nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
-            if (nbytes > 0)
-            {
-                if (strcmp(recvPacket.cmd, "File received")==0)
-                {
-                    printf("Remote peer received file %s\n", fname);
-                }
-            }
-            close(connectSock);
-
-        }
-        else
-        {
-            printf("unexpected remote command: %s\n", recvPacket.cmd);
-            rtn = 0;
-        }
-
-    }
-    else
-    {
-        perror("error recv in handleRemotePeerConnection");
-        rtn = 0;
-    }
-    return rtn;
-}
 
 /* int connectRemotePeer(char* cmd, FileList *master)
  * Connect remote client
  * return 0 for error, return 1 for success
  */
-int connectRemotePeer(char* cmd, FileList *master, const char *keyName, const char *certName, const char *CACert)
+int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *keyName, const char *certName, const char *CACert)
 {
     // ssl setup
     SSL_CTX *ctx;
@@ -340,9 +257,6 @@ int connectRemotePeer(char* cmd, FileList *master, const char *keyName, const ch
     SSL_CTX_set_verify_depth(ctx, 1);
 
 
-
-
-
     int rtn = 1;
     DataPacket recvPacket, sendPacket;
     int nbytes, fsize, remoteport, i, connectSock;
@@ -354,18 +268,29 @@ int connectRemotePeer(char* cmd, FileList *master, const char *keyName, const ch
     char *sec_arg = strstr(cmd, " ");
     strcpy(fname, sec_arg+1);
     // identify remote peer owns the file
-    int index = -1;
+    int index = -2;
     for (i = 0; i < master->num; i++)
     {
         if (strcmp(fname, master->files[i].fileName)==0)
         {
-            index = i;
-            break;
+            if (strcmp(master->files[i].fileOwner, initiator) == 0)
+            {index = -1;}
+            else 
+            {
+                index = i;
+                break;
+            }
         }
     }
-    if (index < 0)
+    if (index == -2)
     {
         printf("File %s is not in master file list, giving up...\n",fname);
+        rtn = 0;
+        return rtn;
+    }
+    if (index == -1)
+    {
+        printf("Only available copy of file %s is local, giving up...\n", fname);
         rtn = 0;
         return rtn;
     }
@@ -373,7 +298,7 @@ int connectRemotePeer(char* cmd, FileList *master, const char *keyName, const ch
     fsize = master->files[index].fileSize;
     remoteport = master->files[index].ownerPort;
     strcpy(remoteIP, master->files[index].ownerIP);
-    // set remot address
+    // set remote address
     bzero(&remotePeerAddr, sizeof(remotePeerAddr));
     remotePeerAddr.sin_family = AF_INET;
     remotePeerAddr.sin_addr.s_addr = inet_addr(remoteIP);
@@ -384,16 +309,6 @@ int connectRemotePeer(char* cmd, FileList *master, const char *keyName, const ch
     if (connect(connectSock, (struct sockaddr*)&(remotePeerAddr), sizeof(remotePeerAddr)) == 0)
     {
         printf("connected to remote peer\n");
-        //sleep(2);
-        // once connected, set socket as non block
-        /*
-        if (fcntl(connectSock, F_SETFL, O_NDELAY)<0)
-        {
-            perror("error set non-block for peer-peer socket\n");
-            rtn = 0;
-            return rtn;
-        }
-        */
 
         // create ssl struct
         connectSSL = SSL_new(ctx);
@@ -405,7 +320,6 @@ int connectRemotePeer(char* cmd, FileList *master, const char *keyName, const ch
         {
             printf("ssl connected to remote client\n");
         }
-
 
 
         // send command
