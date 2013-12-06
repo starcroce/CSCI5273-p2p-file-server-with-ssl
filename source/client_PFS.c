@@ -17,9 +17,63 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include "util.h"
+#include <openssl/crypto.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 // ./client_PFS <Client Name> <Server IP> <Server Port> <Private Key> <Certificate of this Client> <CA Cert>
 int main(int argc, char const *argv[]){
+    // ssl setup
+    SSL_CTX *ctx;
+    SSL *clieSSL, *p2pSSL;
+    SSL_METHOD *meth;
+    // Load encryption & hashing algorithms for the SSL program
+    SSL_library_init();
+    // Load the error strings for SSL & CRYPTO APIs
+    SSL_load_error_strings();
+    // Create an SSL_METHOD structure (choose an SSL/TLS protocol version)
+    meth = SSLv3_method();
+    // Create an SSL_CTX structure
+    ctx = SSL_CTX_new(meth);
+    // Create an SSL_CTX structure
+    ctx = SSL_CTX_new(meth);
+    if(ctx == NULL)
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Load the client certificate into the SSL_CTX structure
+    if(SSL_CTX_use_certificate_file(ctx, argv[5], SSL_FILETYPE_PEM) <= 0)
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Load the private-key corresponding to the client certificate
+    if(SSL_CTX_use_PrivateKey_file(ctx, argv[4], SSL_FILETYPE_PEM) <= 0)
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Check if the client certificate and private-key matches
+    if(!SSL_CTX_check_private_key(ctx))
+    {
+        printf("Private key does not match the certificate public key\n");
+        exit(1);
+    }   
+    // Load the RSA CA certificate into the SSL_CTX structure
+    // This will allow this client to verify the server's certificate
+    if(!SSL_CTX_load_verify_locations(ctx, argv[6], NULL))
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Set flag in context to require peer (server) certificate verification
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+    SSL_CTX_set_verify_depth(ctx, 1);
+
+
+
+
 	struct sockaddr_in remoteAddr, p2pAddr;
 	int clieSock;   // for connecting to server
 	int p2pSock;    // for p2p transfer
@@ -67,6 +121,17 @@ int main(int argc, char const *argv[]){
 		perror("connect to server");
 		exit(1);
 	}
+
+    // create ssl struct
+    clieSSL = SSL_new(ctx);
+    // Assign the socket into the SSL structure
+    SSL_set_fd(clieSSL, clieSock);
+    // Perform SSL Handshake on the SSL client
+    if(SSL_connect(clieSSL) == 1)
+    {
+        printf("ssl connected to server\n");
+    }
+
     // set sockets to non-block mode
     if (fcntl(clieSock, F_SETFL, O_NDELAY) < 0)
     {
@@ -98,7 +163,8 @@ int main(int argc, char const *argv[]){
 
 	// upload file list to server
 	int nbytes;
-	nbytes = send(clieSock, &localFileListPacket, sizeof(Packet), 0);
+	// nbytes = send(clieSock, &localFileListPacket, sizeof(Packet), 0);
+    nbytes = SSL_write(clieSSL, &localFileListPacket, sizeof(Packet));
 	if(nbytes < 0){
 		perror("init upload");
 		exit(1);
@@ -112,7 +178,8 @@ int main(int argc, char const *argv[]){
         while(!kbhit())
         {
             // no user input, recv from server
-            nbytes = recv(clieSock, &recvPacket, sizeof(Packet), 0);
+            // nbytes = recv(clieSock, &recvPacket, sizeof(Packet), 0);
+            nbytes = SSL_read(clieSSL, &recvPacket, sizeof(Packet));
             if (nbytes > 0)
             {
                 if (recvPacket.type == 0)
@@ -135,6 +202,9 @@ int main(int argc, char const *argv[]){
             peerSock = accept(p2pSock, NULL, sizeof(struct sockaddr_in));
             if(peerSock > 0)
             {
+                // create p2p ssl
+
+
                 sleep(1);
                 // connection established
                 // set to nonblock
@@ -228,7 +298,8 @@ int main(int argc, char const *argv[]){
 		if(strcmp(command, "ls") == 0)
         {
             strcpy(sendCmdPacket.cmd, command);
-			nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
+			// nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
+            nbytes = SSL_write(clieSSL, &sendCmdPacket, sizeof(Packet));
 			if(nbytes < 0)
             {
 				perror("send ls command");
@@ -238,7 +309,8 @@ int main(int argc, char const *argv[]){
         {
             // deregister with server
             strcpy(sendCmdPacket.cmd, command);
-            nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
+            // nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
+            nbytes = SSL_write(clieSSL, &sendCmdPacket, sizeof(Packet));
             if (nbytes < 0)
             {
                 perror("send exit command");
