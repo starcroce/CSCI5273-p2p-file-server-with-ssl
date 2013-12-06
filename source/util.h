@@ -15,6 +15,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <openssl/crypto.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #define MAXBUFFSIZE 1000
 #define MAX 30
@@ -288,8 +291,58 @@ int handleRemotePeerConnection(int connectSock)
  * Connect remote client
  * return 0 for error, return 1 for success
  */
-int connectRemotePeer(char* cmd, FileList *master)
+int connectRemotePeer(char* cmd, FileList *master, const char *keyName, const char *certName, const char *CACert)
 {
+    // ssl setup
+    SSL_CTX *ctx;
+    SSL *connectSSL;
+    SSL_METHOD *meth;
+    // Load encryption & hashing algorithms for the SSL program
+    SSL_library_init();
+    // Load the error strings for SSL & CRYPTO APIs
+    SSL_load_error_strings();
+    // Create an SSL_METHOD structure (choose an SSL/TLS protocol version)
+    meth = SSLv3_method();
+    // Create an SSL_CTX structure
+    ctx = SSL_CTX_new(meth);
+    if(ctx == NULL)
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Load the client certificate into the SSL_CTX structure
+    if(SSL_CTX_use_certificate_file(ctx, certName, SSL_FILETYPE_PEM) <= 0)
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Load the private-key corresponding to the client certificate
+    if(SSL_CTX_use_PrivateKey_file(ctx, keyName, SSL_FILETYPE_PEM) <= 0)
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Check if the client certificate and private-key matches
+    if(!SSL_CTX_check_private_key(ctx))
+    {
+        printf("Private key does not match the certificate public key\n");
+        exit(1);
+    }   
+    // Load the RSA CA certificate into the SSL_CTX structure
+    // This will allow this client to verify the server's certificate
+    if(!SSL_CTX_load_verify_locations(ctx, CACert, NULL))
+    {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+    // Set flag in context to require peer (server) certificate verification
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+    SSL_CTX_set_verify_depth(ctx, 1);
+
+
+
+
+
     int rtn = 1;
     DataPacket recvPacket, sendPacket;
     int nbytes, fsize, remoteport, i, connectSock;
@@ -341,9 +394,24 @@ int connectRemotePeer(char* cmd, FileList *master)
             return rtn;
         }
         */
+
+        // create ssl struct
+        connectSSL = SSL_new(ctx);
+        // Assign the socket into the SSL structure
+        SSL_set_fd(connectSSL, connectSock);
+        // Perform SSL Handshake on the SSL client
+        nbytes = SSL_connect(connectSSL);
+        if(nbytes == 1)
+        {
+            printf("ssl connected to remote client\n");
+        }
+
+
+
         // send command
         strcpy(sendPacket.cmd, cmd);
-        nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
+        // nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
+        nbytes = SSL_write(connectSSL, &sendPacket, sizeof(DataPacket));
         if (nbytes < 0)
         {
             printf("error send %s cmd to peer", cmd);
@@ -351,7 +419,8 @@ int connectRemotePeer(char* cmd, FileList *master)
             return rtn;
         }
         // recv
-        nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
+        // nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
+        nbytes = SSL_read(connectSSL, &recvPacket, sizeof(DataPacket));
         if (nbytes < 0)
         {
             perror("error recv from remote client");
@@ -372,7 +441,8 @@ int connectRemotePeer(char* cmd, FileList *master)
             int repeats = (int) (fsize/MAXBUFFSIZE)+1;
             for (i = 0; i < repeats; i++)
             {
-                nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
+                // nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
+                nbytes = SSL_read(connectSSL, &recvPacket, sizeof(DataPacket));
                 if (nbytes > 0)
                 {
                     fwrite(recvPacket.payload, sizeof(char), recvPacket.size, file);
@@ -381,7 +451,8 @@ int connectRemotePeer(char* cmd, FileList *master)
             fclose(file);
             printf("File %s received.\n", fname);
             strcpy(sendPacket.cmd, "File received");
-            nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
+            // nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
+            nbytes = SSL_write(connectSSL, &sendPacket, sizeof(DataPacket));
             if (nbytes < 0)
             {
                 perror("error to send cmd File received");

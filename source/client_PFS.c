@@ -23,6 +23,9 @@
 
 // ./client_PFS <Client Name> <Server IP> <Server Port> <Private Key> <Certificate of this Client> <CA Cert>
 int main(int argc, char const *argv[]){
+    const char *keyName = argv[4]; 
+    const char *certName = argv[5];
+    const char *CACert = argv[6];
     // ssl setup
     SSL_CTX *ctx;
     SSL *clieSSL, *p2pSSL;
@@ -203,7 +206,15 @@ int main(int argc, char const *argv[]){
             if(peerSock > 0)
             {
                 // create p2p ssl
-
+                p2pSSL = SSL_new(ctx);
+                // Assign the socket into the SSL structure
+                SSL_set_fd(p2pSSL, peerSock);
+                // Perform SSL Handshake on the client recv cmd
+                nbytes = SSL_accept(p2pSSL);
+                if(nbytes == 1)
+                {
+                    printf("ssl accpeted connection to remote client\n");
+                }
 
                 sleep(1);
                 // connection established
@@ -222,7 +233,8 @@ int main(int argc, char const *argv[]){
                 FILE *file;
                 
                 // try to receive from remote peer
-                nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
+                // nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
+                nbytes = SSL_read(p2pSSL, &recvDataPacket, sizeof(DataPacket));
                 if (nbytes > 0)
                 {
                     // check cmd field
@@ -237,7 +249,8 @@ int main(int argc, char const *argv[]){
                         {
                             printf("Failed open file %s.\n", fname);
                             strcpy(sendDataPacket.cmd, "File Not Found");
-                            nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                            // nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                            nbytes = SSL_write(p2pSSL, &sendDataPacket, sizeof(DataPacket));
                             if (nbytes < 0)
                             {
                                 perror("error send cmd File Not Found to remote peer");
@@ -245,7 +258,8 @@ int main(int argc, char const *argv[]){
                             rtn = 0;
                         }
                         strcpy(sendDataPacket.cmd, "Sending");
-                        nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                        // nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                        nbytes = SSL_write(p2pSSL, &sendDataPacket, sizeof(DataPacket));
                         if (nbytes < 0)
                         {
                             perror("error send cmd Sending to remote peer");
@@ -259,7 +273,8 @@ int main(int argc, char const *argv[]){
                             size_per_send = (MAXBUFFSIZE) < (fsize-i*MAXBUFFSIZE) ? (MAXBUFFSIZE):(fsize-i*MAXBUFFSIZE);
                             int readed = fread(sendDataPacket.payload, sizeof(char), size_per_send, file);
                             sendDataPacket.size = size_per_send;
-                            nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                            // nbytes = send(peerSock, &sendDataPacket, sizeof(DataPacket), 0);
+                            nbytes = SSL_write(p2pSSL, &sendDataPacket, sizeof(DataPacket));
                             if (nbytes < 0)
                             {
                                 perror("error send file to remote peer");
@@ -268,7 +283,8 @@ int main(int argc, char const *argv[]){
                         fclose(file);
                         printf("file sent\n");
                         // receive response from reomte peer
-                        nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
+                        // nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
+                        nbytes = SSL_read(p2pSSL, &recvDataPacket, sizeof(DataPacket));
                         if (nbytes > 0)
                         {
                             if (strcmp(recvDataPacket.cmd, "File received")==0)
@@ -323,7 +339,7 @@ int main(int argc, char const *argv[]){
         }
         if (strstr(command, "get"))
         {
-            connectRemotePeer(command, &masterList);
+            connectRemotePeer(command, &masterList, keyName, certName, CACert);
         }
     }
 
