@@ -161,7 +161,7 @@ int kbhit()
 
 // remove exit clinet's file list from master file list
 void deregisterClient(NameList *clients, FileList *master, char *name)
-{   
+{
     // remove client name from name list
     int i = 0;
     while(strcmp(clients->names[i], name) != 0)
@@ -194,18 +194,14 @@ void deregisterClient(NameList *clients, FileList *master, char *name)
     // overwrite these entries with the following entries
     int range = pos2 - pos1;
     master->num -= range;
-    printf("pos1: %d, pos2: %d\n", pos1, pos2);
     printf("Num of files in master file list: %d\n", master->num);
     for(i = pos1; i < master->num; i++)
     {
-        if(strcmp(master->files[i].fileOwner, name) == 0)
-        {
-            strcpy(master->files[i].fileName, master->files[i + range].fileName);
-            strcpy(master->files[i].fileOwner, master->files[i + range].fileOwner);
-            master->files[i].fileSize = master->files[i + range].fileSize;
-            strcpy(master->files[i].ownerIP, master->files[i + range].ownerIP);
-            master->files[i].ownerPort = master->files[i + range].ownerPort;
-        }
+        strcpy(master->files[i].fileName, master->files[i + range].fileName);
+        strcpy(master->files[i].fileOwner, master->files[i + range].fileOwner);
+        master->files[i].fileSize = master->files[i + range].fileSize;
+        strcpy(master->files[i].ownerIP, master->files[i + range].ownerIP);
+        master->files[i].ownerPort = master->files[i + range].ownerPort;
     }
     for(i = master->num; i < MAX; i++)
     {
