@@ -19,17 +19,14 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-
-
-
 // ./server_PFS <port number> <private key> <certificate of server> <CA sert>
-int main(int argc, char const *argv[]){
+int main(int argc, char const *argv[])
+{
 	int i, j;
 	// ssl setup
 	SSL_CTX *ctx;
 	SSL *ssl[MAX];
 	SSL_METHOD *meth;
-	X509 *clientCert[MAX];
 
 	// Load encryption & hashing algorithms for the SSL program
 	SSL_library_init();
@@ -73,16 +70,6 @@ int main(int argc, char const *argv[]){
 	// Set the verification depth to 1
 	SSL_CTX_set_verify_depth(ctx, 1);
 
-	// create SSL structure
-	// for(i = 0; i < MAX; i++)
-	// {
-	// 	ssl[i] = SSL_new(ctx);
-	// }
-
-
-
-
-
 	struct sockaddr_in servAddr;
 	int servSock; // for listening
 	int connectSocks[MAX]; // for connection
@@ -125,13 +112,7 @@ int main(int argc, char const *argv[]){
 	}
 
 	int nbytes;
-	char command[MAXBUFFSIZE];
 	int flag;
-
-	// init master file list
-	//FileList masterFileList;
-	// FileList recvFileList;
-	//masterFileList.num = 0;
 
 	Packet sendFlieListPacket, sendCmdPacket;
 	Packet recvPacket;
@@ -144,7 +125,6 @@ int main(int argc, char const *argv[]){
 
 	while(1)
 	{
-
 		// accept the client connection and set non-block
 		for(i = 0; i < MAX; i++)
 		{
@@ -153,33 +133,26 @@ int main(int argc, char const *argv[]){
 				connectSocks[i] = accept(servSock, NULL, sizeof(struct sockaddr_in));
 				if(connectSocks[i] > 0)
 				{
-					// // set connectSock to non-block
-					// if(fcntl(connectSocks[i], F_SETFL, O_NDELAY) < 0)
-					// {
-					// 	perror("cannot set connect sock non-block");
-					// }
-					printf("client connected\n");
+					printf("Client connected via TCP\n");
 					ssl[i] = SSL_new(ctx);
 
 					// Assign the socket into the SSL structure
 					SSL_set_fd(ssl[i], connectSocks[i]);
 					// Perform SSL Handshake on the SSL server
 					nbytes = SSL_accept(ssl[i]);
-					printf("%d\n", nbytes);
+					// printf("%d\n", nbytes);
 					if(nbytes == 1)
 					{
-						printf("ssl connected to client\n");
+						printf("Client connected via SSL\n");
 					}
 					if(nbytes <= 0)
 					{
 						SSL_get_error(ssl[i], nbytes);
 					}
-					// // Get the client's certificate
-					// clientCert[i] = SSL_get_peer_certificate(ssl[i]);
 					// set connectSock to non-block
 					if(fcntl(connectSocks[i], F_SETFL, O_NDELAY) < 0)
 					{
-						perror("cannot set connect sock non-block");
+						perror("Cannot set connect sock non-block");
 					}
 				}
 			}
@@ -190,35 +163,31 @@ int main(int argc, char const *argv[]){
 		{
 			if(connectSocks[i] > 0)
 			{
-				// nbytes = recv(connectSocks[i], &recvPacket, sizeof(Packet), 0);
 				nbytes = SSL_read(ssl[i], &recvPacket, sizeof(Packet));
 				if(nbytes > 0)
 				{
-					printf("recv sth from client type %d\n", recvPacket.type);
 					// if recv new file list
 					if(recvPacket.type == 1)
 					{
 						// check if already client name already existed
 						flag = isExisted(&clients, recvPacket.fileList.owner);
-						printf("isExisted say %d\n", flag);
 						// new client
 						if(flag == 0)
 						{
-							printf("new client\n");
+							printf("Receive new file list from client %s\n", recvPacket.fileList.owner);
 							mergeFileList(&sendFlieListPacket.fileList, &recvPacket.fileList);	
 							for(j = 0; j < MAX; j++)
 							{
 								if(connectSocks[j] > 0)
 								{
-									// nbytes = send(connectSocks[j], &sendFlieListPacket, sizeof(Packet), 0);
 									nbytes = SSL_write(ssl[j], &sendFlieListPacket, sizeof(Packet));
 									if(nbytes < 0)
 									{
-										perror("push updated file list");
+										perror("Push updated file list");
 									}
 									if(nbytes > 0)
 									{
-										printf("push the merged file list\n");
+										printf("Push master file list\n");
 									}
 								}
 							}	
@@ -226,26 +195,24 @@ int main(int argc, char const *argv[]){
 						// client already existed
 						if(flag == 1)
 						{
-							// nbytes = send(connectSocks[i], &sendCmdPacket, sizeof(Packet), 0);
 							nbytes = SSL_write(ssl[i], &sendCmdPacket, sizeof(Packet));
 							if(nbytes < 0)
 							{
-								perror("send command");
+								perror("Send command");
 							}
 						}	
 					}
 					// if receive command from client
 					if(recvPacket.type == 0)
 					{
-						printf("client: %s\n", recvPacket.cmd);
+						printf("Client: %s\n", recvPacket.cmd);
 						// ls command
 						if(strcmp(recvPacket.cmd, "ls") == 0)
 						{
-							// nbytes = send(connectSocks[i], &sendFlieListPacket, sizeof(Packet), 0);
 							nbytes = SSL_write(ssl[i], &sendFlieListPacket, sizeof(Packet));
 							if(nbytes < 0)
 							{
-								perror("response to ls command");
+								perror("Response to ls command");
 							}
 						}
 						// exit command
@@ -262,15 +229,14 @@ int main(int argc, char const *argv[]){
 							{
 								if(connectSocks[j] > 0)
 								{
-									// nbytes = send(connectSocks[j], &sendFlieListPacket, sizeof(Packet), 0);
 									nbytes = SSL_write(ssl[j], &sendFlieListPacket, sizeof(Packet));
 									if(nbytes < 0)
 									{
-										perror("push updated file list");
+										perror("Push updated file list");
 									}
 									if(nbytes > 0)
 									{
-										printf("push the updated file list after deregister\n");
+										printf("Push the updated file list after one client exit\n");
 									}
 								}
 							}
@@ -279,11 +245,6 @@ int main(int argc, char const *argv[]){
 				}
 			}
 		}
-
-
-
 	}
-
-
 	return 0;
 }

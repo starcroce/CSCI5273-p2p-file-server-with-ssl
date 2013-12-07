@@ -22,7 +22,8 @@
 #define MAXBUFFSIZE 1000
 #define MAX 30
 
-typedef struct{
+typedef struct
+{
     char fileName[128];
     int fileSize;
     char fileOwner[8];
@@ -36,20 +37,23 @@ typedef struct
     char num;
 } NameList;
 
-typedef struct{
+typedef struct
+{
     int num;
     char owner[8];
     FileInfo files[MAX];
 } FileList;
 
 // type = 1 for file list, type = 0 for command
-typedef struct {
+typedef struct 
+{
     int type;
     char cmd[256];
     FileList fileList;
 } Packet;
 
-typedef struct {
+typedef struct 
+{
     int size;
     char payload[MAXBUFFSIZE];
     char cmd[256];
@@ -190,6 +194,8 @@ void deregisterClient(NameList *clients, FileList *master, char *name)
     // overwrite these entries with the following entries
     int range = pos2 - pos1;
     master->num -= range;
+    printf("pos1: %d, pos2: %d\n", pos1, pos2);
+    printf("Num of files in master file list: %d\n", master->num);
     for(i = pos1; i < master->num; i++)
     {
         if(strcmp(master->files[i].fileOwner, name) == 0)
@@ -200,6 +206,10 @@ void deregisterClient(NameList *clients, FileList *master, char *name)
             strcpy(master->files[i].ownerIP, master->files[i + range].ownerIP);
             master->files[i].ownerPort = master->files[i + range].ownerPort;
         }
+    }
+    for(i = master->num; i < MAX; i++)
+    {
+        bzero(&master->files[i], sizeof(FileInfo));
     }
 }
 
@@ -256,7 +266,6 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
     SSL_CTX_set_verify_depth(ctx, 1);
 
-
     int rtn = 1;
     DataPacket recvPacket, sendPacket;
     int nbytes, fsize, remoteport, i, connectSock;
@@ -294,7 +303,7 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
         rtn = 0;
         return rtn;
     }
-    printf("find file in master list\n");
+    printf("Find file in master list\n");
     fsize = master->files[index].fileSize;
     remoteport = master->files[index].ownerPort;
     strcpy(remoteIP, master->files[index].ownerIP);
@@ -306,10 +315,9 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
 
     // create new socket and connect remote client
     connectSock = socket(AF_INET, SOCK_STREAM, 0);
-    if (connect(connectSock, (struct sockaddr*)&(remotePeerAddr), sizeof(remotePeerAddr)) == 0)
+    if(connect(connectSock, (struct sockaddr*)&(remotePeerAddr), sizeof(remotePeerAddr)) == 0)
     {
-        printf("connected to remote peer\n");
-
+        printf("Connected to remote peer via TCP\n");
         // create ssl struct
         connectSSL = SSL_new(ctx);
         // Assign the socket into the SSL structure
@@ -318,13 +326,10 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
         nbytes = SSL_connect(connectSSL);
         if(nbytes == 1)
         {
-            printf("ssl connected to remote client\n");
+            printf("Connected to remote peer via SSL\n");
         }
-
-
         // send command
         strcpy(sendPacket.cmd, cmd);
-        // nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
         nbytes = SSL_write(connectSSL, &sendPacket, sizeof(DataPacket));
         if (nbytes < 0)
         {
@@ -333,7 +338,6 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
             return rtn;
         }
         // recv
-        // nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
         nbytes = SSL_read(connectSSL, &recvPacket, sizeof(DataPacket));
         if (nbytes < 0)
         {
@@ -343,7 +347,7 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
         }
         if (strstr(recvPacket.cmd, "File Not Found"))
         {
-            printf("remote client says: %s\n", recvPacket.cmd);
+            printf("Remote client says: %s\n", recvPacket.cmd);
             rtn = 0;
             return rtn;
         }
@@ -351,11 +355,10 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
         {
             printf("Receiving file %s...\n", fname);
             // receive and write file
-            file=fopen(fname,"wb");
+            file = fopen(fname,"wb");
             int repeats = (int) (fsize/MAXBUFFSIZE)+1;
             for (i = 0; i < repeats; i++)
             {
-                // nbytes = recv(connectSock, &recvPacket, sizeof(DataPacket), 0);
                 nbytes = SSL_read(connectSSL, &recvPacket, sizeof(DataPacket));
                 if (nbytes > 0)
                 {
@@ -365,7 +368,6 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
             fclose(file);
             printf("File %s received.\n", fname);
             strcpy(sendPacket.cmd, "File received");
-            // nbytes = send(connectSock, &sendPacket, sizeof(DataPacket), 0);
             nbytes = SSL_write(connectSSL, &sendPacket, sizeof(DataPacket));
             if (nbytes < 0)
             {
@@ -388,4 +390,3 @@ int connectRemotePeer(char* cmd, FileList *master, char *initiator, const char *
     }
     return rtn;
 }
-

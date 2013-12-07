@@ -22,7 +22,8 @@
 #include <openssl/err.h>
 
 // ./client_PFS <Client Name> <Server IP> <Server Port> <Private Key> <Certificate of this Client> <CA Cert>
-int main(int argc, char const *argv[]){
+int main(int argc, char const *argv[])
+{
     const char *keyName = argv[4]; 
     const char *certName = argv[5];
     const char *CACert = argv[6];
@@ -40,6 +41,7 @@ int main(int argc, char const *argv[]){
     ctx = SSL_CTX_new(meth);
     // Create an SSL_CTX structure
     ctx = SSL_CTX_new(meth);
+
     if(ctx == NULL)
     {
         ERR_print_errors_fp(stderr);
@@ -87,7 +89,7 @@ int main(int argc, char const *argv[]){
 
 	bzero(&p2pAddr, sizeof(p2pAddr));
 	p2pAddr.sin_family = AF_INET;
-	p2pAddr.sin_addr.s_addr = inet_addr(argv[2]);//INADDR_ANY;
+	p2pAddr.sin_addr.s_addr = inet_addr(argv[2]);
 	p2pAddr.sin_port = htons((int)(9500 + (argv[1][0] - 'A')));
 
 	// create socket
@@ -160,7 +162,6 @@ int main(int argc, char const *argv[]){
 
 	// upload file list to server
 	int nbytes;
-	// nbytes = send(clieSock, &localFileListPacket, sizeof(Packet), 0);
     nbytes = SSL_write(clieSSL, &localFileListPacket, sizeof(Packet));
 	if(nbytes < 0){
 		perror("init upload");
@@ -170,12 +171,11 @@ int main(int argc, char const *argv[]){
 	char command[128];
     while(1)
     {
-        printf("input command: ls, get, exit\n");
+        printf("Input command: ls, get, exit\n");
 
         while(!kbhit())
         {
             // no user input, recv from server
-            // nbytes = recv(clieSock, &recvPacket, sizeof(Packet), 0);
             nbytes = SSL_read(clieSSL, &recvPacket, sizeof(Packet));
             if (nbytes > 0)
             {
@@ -208,32 +208,23 @@ int main(int argc, char const *argv[]){
                 nbytes = SSL_accept(p2pSSL);
                 if(nbytes == 1)
                 {
-                    printf("ssl accpeted connection to remote client\n");
+                    printf("Accpeted connection from remote client via SSL\n");
                 }
-
                 sleep(1);
                 // connection established
-                // set to nonblock
-                /*
-                if (fcntl(peerSock, F_SETFL, F_SETFL, O_NDELAY)<0)
-                {
-                    perror("error set non block for peer connection\n");
-                }
-                */
-                // peer-2-peer connection handling
-                
+
+                // peer-2-peer connection handling                
                 int rtn = 1, fsize, size_per_send;
                 char fname[128];
                 DataPacket recvDataPacket, sendDataPacket;
                 FILE *file;
                 
                 // try to receive from remote peer
-                // nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
                 nbytes = SSL_read(p2pSSL, &recvDataPacket, sizeof(DataPacket));
                 if (nbytes > 0)
                 {
                     // check cmd field
-                    printf("recv cmd %s from remote peer\n", recvDataPacket.cmd);
+                    printf("Receive command '%s' from remote peer\n", recvDataPacket.cmd);
                     if (strstr(recvDataPacket.cmd, "get"))
                     {
                         // parse file name
@@ -263,7 +254,7 @@ int main(int argc, char const *argv[]){
                         stat(fname, &st);
                         fsize = st.st_size;
                         int repeats = (int) (fsize/MAXBUFFSIZE) + 1;
-                        for (i=0; i<repeats; i++)
+                        for (i = 0; i < repeats; i++)
                         {
                             size_per_send = (MAXBUFFSIZE) < (fsize-i*MAXBUFFSIZE) ? (MAXBUFFSIZE):(fsize-i*MAXBUFFSIZE);
                             int readed = fread(sendDataPacket.payload, sizeof(char), size_per_send, file);
@@ -276,9 +267,8 @@ int main(int argc, char const *argv[]){
                             }
                         }
                         fclose(file);
-                        printf("file sent\n");
+                        printf("File sent\n");
                         // receive response from reomte peer
-                        // nbytes = recv(peerSock, &recvDataPacket, sizeof(DataPacket), 0);
                         nbytes = SSL_read(p2pSSL, &recvDataPacket, sizeof(DataPacket));
                         if (nbytes > 0)
                         {
@@ -294,7 +284,7 @@ int main(int argc, char const *argv[]){
                     }
                     else
                     {
-                        printf("unexpected remote command: %s\n", recvDataPacket.cmd);
+                        printf("Unexpected remote command: %s\n", recvDataPacket.cmd);
                         rtn = 0;
                     }
                 }
@@ -305,9 +295,7 @@ int main(int argc, char const *argv[]){
                 }
                 sleep(1);
                 close(peerSock);
-                printf("input command: ls, get, exit\n");
-                //break;
-                //handleRemotePeerConnection(peerSock);
+                printf("Input command: ls, get, exit\n");
             }
         }
 		gets(command);
@@ -315,7 +303,6 @@ int main(int argc, char const *argv[]){
 		if(strcmp(command, "ls") == 0)
         {
             strcpy(sendCmdPacket.cmd, command);
-			// nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
             nbytes = SSL_write(clieSSL, &sendCmdPacket, sizeof(Packet));
 			if(nbytes < 0)
             {
@@ -326,7 +313,6 @@ int main(int argc, char const *argv[]){
         {
             // deregister with server
             strcpy(sendCmdPacket.cmd, command);
-            // nbytes = send(clieSock, &sendCmdPacket, sizeof(Packet), 0);
             nbytes = SSL_write(clieSSL, &sendCmdPacket, sizeof(Packet));
             if (nbytes < 0)
             {
@@ -343,6 +329,5 @@ int main(int argc, char const *argv[]){
             connectRemotePeer(command, &masterList, argv[1], keyName, certName, CACert);
         }
     }
-
 	return 0;
 }
